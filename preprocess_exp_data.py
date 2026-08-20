@@ -13,7 +13,7 @@ YAW_CUSTOM_ROTATIONS = {'invasion': -90,
                         'asteroids': 90,
                         'underwood': 90}
 
-# ---- Utility functions ---
+# ---- Utility functions --- +-+-
 
 def correct_to_180(df):
     ''' Corrects head movement values to be within [-180, 180] degrees '''
