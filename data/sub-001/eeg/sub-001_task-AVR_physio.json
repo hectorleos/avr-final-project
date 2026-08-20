@@ -1,0 +1,31 @@
+{
+    "SamplingFrequency": 500,
+    "StartTime": 505997.1929789014,
+    "Columns": [
+        "cardiac",
+        "respiratory",
+        "ppg",
+        "gsr"
+    ],
+    "Manufacturer": "Brain Products",
+    "ManufacturersModelName": "LiveAmp Sensor & Trigger Extension",
+    "cardiac": {
+        "Description": "continuous heart measurement with three passive electrodes placed in Lead IIconfiguration",
+        "Units": "mV"
+    },
+    "respiratory": {
+        "Description": "continuous measurements by respiration belt placed under participant's chest",
+        "Units": "mV"
+    },
+    "ppg": {
+        "Description": "continuous measurements of blood volume pulse placed on left index finger",
+        "Units": "mV"
+    },
+    "gsr": {
+        "Description": "continuous measurements of GSR, two electrodes placed on the palmar side of the left hand (distal and proximal hypothenar)",
+        "Units": "mV"
+    },
+    "InstitutionName": "Max Planck Institute for Human Brain and Cognitive Sciences",
+    "InstitutionAddress": "Stephanstrasse 1a, 04103 Leipzig, Germany",
+    "InstitutionalDepartmentName": "Department of Neurology"
+}

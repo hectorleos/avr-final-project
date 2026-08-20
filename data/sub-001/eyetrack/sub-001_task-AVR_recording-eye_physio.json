@@ -1,0 +1,19 @@
+{
+    "SamplingFrequency": 120,
+    "StartTime": 505997.21957235935,
+    "Columns": [
+        "timestamp",
+        "x_coordinate",
+        "y_coordinate",
+        "z_coordinate",
+        "pitch",
+        "yaw",
+        "roll",
+        "pupil_size"
+    ],
+    "PhysioType": "eyetrack",
+    "Organ": "eye (cyclopedian)",
+    "EnvironmentCoordinates": "",
+    "CalibrationCount": 1,
+    "CalibrationType": "manual"
+}

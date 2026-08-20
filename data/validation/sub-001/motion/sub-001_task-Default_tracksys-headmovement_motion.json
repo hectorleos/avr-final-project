@@ -1,0 +1,9 @@
+{
+    "SamplingFrequency": 90,
+    "TrackingSystemName": "Vive Pro Eye HMD",
+    "TaskName": "Default",
+    "TaskDescription": "VR task",
+    "MotionChannelCount": 6,
+    "RecordingDuration": 1365.1,
+    "MissingValues": "0"
+}
