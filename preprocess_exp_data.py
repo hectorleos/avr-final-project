@@ -82,7 +82,7 @@ def preprocess_subject_data(sub, validation=False, plot_head_tracking=True, data
     task_name = 'Default' if validation else 'AVR'
 
     # Load eye tracking data (Note: using cyclopedian eye data)
-    gaze_direc = os.path.join(sub_data_dir, 'eyetrack', f'{sub}_task-{task_name}_recording-eye_physio.tsv.gz')
+    gaze_direc = os.path.join(sub_data_dir, 'eyetrack', f'{sub}_task-{task_name}_recording-eye{"_physio" if validation else "3"}.tsv.gz')
     gaze_raw_data = pd.read_csv(gaze_direc, sep="\t", low_memory=False)
   #  raw_data.rename(columns={'x_coordinate': f'x', 'y_coordinate': f'y'}, inplace=True)
     gaze_raw_data.rename(columns={'pitch': 'gaze_pitch', 'yaw': 'gaze_yaw', 'roll': 'gaze_roll'}, inplace=True)
