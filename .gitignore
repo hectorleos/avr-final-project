@@ -1,6 +1,10 @@
 .DS_Store
 **/.DS_Store
 __pycache__/
-stimuli/validation_videos/*.mp4
-*.mp4
+
+# Do not commit output of analysis
 output/
+stimuli/
+data/
+/logs/
+
