@@ -26,6 +26,7 @@ def video_to_frames(stimuli_dir, video_names, validation, video_fps, desired_fps
             Filenames of MP4 videos whose frames are to be extracted, in their correct order.
             If None, filename(s) will be read automatically from video directory.
         validation: bool
+            Whether to use video presented during validation (with fixation crosses).
         video_fps: int
             FPS of which video(s)
         desired_fps: int
@@ -34,6 +35,9 @@ def video_to_frames(stimuli_dir, video_names, validation, video_fps, desired_fps
             Image quality of each frame from 0 (worse) to 100 (best).
         crop_half: bool
             Whether to crop frame to keep only upper half, given some video setups for VR.
+        verbose: bool
+            Whether to print verbose output
+
     Output:
         Video frames will be saved at the output directory. The filenames will include the frame count following 
         the desired FPS (e.g., if desired_fps=1 sec, then the frame count will be equivalent to full seconds).
@@ -99,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--video_names', type=str, nargs='+', default=None,
                      help='Filenames of videos whose frames are to be extracted, in their correct order (e.g.,  --video_names first_video.mp4 second_video.mp4 third_video.mp4).' \
                      'If None, filename(s) will be read automatically from video directory.')
-    parser.add_argument('--validation', action='store_true', default=False, help='Whether to use video presented during validation.')
+    parser.add_argument('--validation', action='store_true', default=False, help='Whether to use video presented during validation (with fixation crosses).')
     parser.add_argument('--video_fps', type=int, default=30, help='Video FPS.')
     parser.add_argument('--desired_fps', type=int, default=1, help='FPS of extracted frames.')
     parser.add_argument('--frame_quality', type=int, default=10, help='Image quality of each frame from 0 (worse) to 100 (best).')

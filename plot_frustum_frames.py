@@ -103,9 +103,9 @@ if __name__ == "__main__":
     parser.add_argument('--fps', type=int, default=1, help='FPS at which data will be trimmed to match extracted video frames.')
     parser.add_argument('--darkening_factor', type=float, default=0.75, help='Factor by which to darken the image outside the frustum mask (between 0 and 1).')
     parser.add_argument('--dpi', type=int, default=100, help='DPI for the saved images.')
+    parser.add_argument('--visual_stats', action='store_true', default=False, help='Whether to plot (normalized) visual statistics within each frame using activity bars.')
     parser.add_argument('--stimuli_dir', type=str, default=Path('stimuli'), help='Directory containing the video frames.')
     parser.add_argument('--output_dir', type=str, default=Path('output'), help='Directory containing the output data for each subject.')
-    parser.add_argument('--visual_stats', action='store_true', default=False, help='Whether to compute visual statistics for each frame.')
     parser.add_argument('--verbose', action='store_true', help='Whether to print verbose output.')
     args = parser.parse_args()
 

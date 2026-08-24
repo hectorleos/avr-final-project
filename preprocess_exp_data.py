@@ -61,7 +61,7 @@ def preprocess_subject_data(sub, validation=False, plot_head_tracking=True, data
         sub: str
             Subject ID (e.g., sub-001).
         validation: bool
-            Whether to run in validation mode, using validation experimental data. 
+            Whether to preprocess datafiles from validation study.
         plot_head_tracking: bool
             Whether to generate and save a plot of head tracking data (pitch/yaw/roll over time) for visual quality control.
         data_dir: str or Path
@@ -177,7 +177,7 @@ def preprocess_subject_data(sub, validation=False, plot_head_tracking=True, data
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--sub', type=str, default=None, help='Subject ID (e.g., sub-001). If None, it will iterate through all subject directories in data_dir.')
-    parser.add_argument('--validation', action='store_true', default=False, help='Whether to run in validation mode (uses validation video frames).')
+    parser.add_argument('--validation', action='store_true', default=False, help='Whether to preprocess datafiles from validation study.')
     parser.add_argument('--plot_head_tracking', action='store_true', default=True, help='Whether to save plots displaying head tracking data.')
     parser.add_argument('--data_dir', type=str, default=Path('data'), help='Directory containing the experimental data for each subject.')
     parser.add_argument('--output_dir', type=str, default=Path('output'), help='Output directory.')
