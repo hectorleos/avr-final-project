@@ -18,6 +18,10 @@ pip install -r requirements.txt
 
 ## ▶️ Runing the Code
 
+# Show schematic image pipeline-schematic.png
+
+![Pipeline schematic](pipeline-schematic.png)
+
 ### 0. Obtain VR video frames
 
 ```bash
@@ -26,8 +30,7 @@ python video_to_frames.py --video_fps 30 --desired_fps 1 --stimuli_dir /path/to/
 
 | Argument | Default | Description |
 |---|---|---|
-| `--video_names` | 'None' |  Filenames of MP4 videos whose frames are to be extracted, in their correct order
-            If None, filename(s) will be read automatically from video directory |
+| `--video_names` | 'None' |  Filenames of MP4 videos whose frames are to be extracted, in their correct order. If None, filename(s) will be read automatically from video directory |
 | `--validation` | `False` | Whether to use video presented during validation (with fixation crosses) |
 | `--video_fps` | `30` | Original frame rate of the source videos |
 | `--desired_fps` | `1` | Frame rate to downsample to when extracting frames |

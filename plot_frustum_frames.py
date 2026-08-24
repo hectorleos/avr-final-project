@@ -9,6 +9,15 @@ import matplotlib.pyplot as plt
 
 # ---- Utility functions ---
 
+NORM_RANGES = {
+    'luminance':   255.0,   # grayscale mean, 0-255
+    'contrast':    127.5,   # grayscale std, max possible for [0,255] data is 127.5 (bimodal)
+    'hue':         179.0,   # OpenCV hue scale, 0-179 (maps to 0-360 degrees)
+    'saturation':  255.0,   # OpenCV S channel, 0-255
+    'value':       255.0,   # OpenCV V channel, 0-255
+    'colorfulness': 109.0,  # empirical ceiling from Hasler & Süsstrunk's colorfulness categories
+}
+
 def plot_imgNfrustum(sub, img, mask, gaze_fixation, visual_stats, curr_exp_time, output_dir, darkening_factor, dpi):
 
     # Darken the image outside the frustum mask
@@ -27,8 +36,7 @@ def plot_imgNfrustum(sub, img, mask, gaze_fixation, visual_stats, curr_exp_time,
         labels = visual_stats.keys()
         values = visual_stats.values()
         for label in visual_stats:
-            if label == 'fov_luminance' or label == 'fov_contrast':
-                visual_stats[label] = visual_stats[label] / 255.0
+            visual_stats[label] = visual_stats[label] / NORM_RANGES[label.split('_')[1]]
 
         # Inset axes in the top-right corner, in axes-fraction coords
         ax_bars = ax_img.inset_axes([0.83, 0.95 - (0.05 * len(labels)), 0.14, 0.05 * len(labels)])  # [x0, y0, width, height]
