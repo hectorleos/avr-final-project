@@ -18,8 +18,6 @@ pip install -r requirements.txt
 
 ## ▶️ Runing the Code
 
-# Show schematic image pipeline-schematic.png
-
 ![Pipeline schematic](pipeline-schematic.png)
 
 ### 0. Obtain VR video frames
@@ -34,13 +32,13 @@ python video_to_frames.py --video_fps 30 --desired_fps 1 --stimuli_dir /path/to/
 | `--validation` | `False` | Whether to use video presented during validation (with fixation crosses) |
 | `--video_fps` | `30` | Original frame rate of the source videos |
 | `--desired_fps` | `1` | Frame rate to downsample to when extracting frames |
-| `--frame_quality` | `10` | Image quality of each frame from 0 (worse) to 100 (best) |
+| `--frame_quality` | `90` | Image quality of each frame from 0 (worse) to 100 (best) |
 | `--crop_half` | `False` | If set, crops each frame to half width (for stereo VR footage) |
 | `--stimuli_dir` | 'stimuli' | Path to directory containing raw and processed stimuli |
 | `--verbose` | `False` | Print progress during code execution |
 
 
-### 1. Preprocess VR experimental data
+### 1. Preprocess VR experimental data keeping head and eye tracking data
 
 ```bash
 python preprocess_exp_data.py --data_dir /path/to/dir --output_dir /path/to/dir --verbose
@@ -59,7 +57,7 @@ python preprocess_exp_data.py --data_dir /path/to/dir --output_dir /path/to/dir 
 ### 2. Compute FOV frustum and gaze fixation for each frame
 
 ```bash
-python compute_frustum_mask.py --fps 1 --hfov 100 --vfov 100 --stimuli_dir /path/to/dir --output_dir /path/to/dir --verbose
+python compute_frustum_mask.py --fps 1 --hfov 100 --vfov 100 --n_rays 100 --stimuli_dir /path/to/dir --output_dir /path/to/dir --verbose
 ```
 
 | Argument | Default | Description |
@@ -69,6 +67,10 @@ python compute_frustum_mask.py --fps 1 --hfov 100 --vfov 100 --stimuli_dir /path
 | `--fps` | `1` | Frame rate of extracted video frames |
 | `--hfov` | `100` | Horizontal field of view in degrees of VR set |
 | `--vfov` | `100` | Vertical field of view in degrees of VR set |
+| `--n_rays` | `100` | Number of rays to use for frustum computation |
+| `--binary_dilation_iters` | `2` | Number of iterations for binary dilation |
+| `--chunk_size` | None | (int) Size of chunks for saving the mask history. If None, will save all data in a single file |
+| `--compute_visual_stats` | `False` |  Whether to also compute visual statistics for each frame |
 | `--stimuli_dir` | 'stimuli' | Path to directory containing raw and processed stimuli |
 | `--output_dir` | 'output' | Path to directory containing output of analysis |
 | `--verbose` | `False` | Print progress during code execution |

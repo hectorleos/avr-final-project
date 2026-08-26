@@ -26,6 +26,38 @@ def gaussian_weight_map(mask, nsc_vec, sigma=100, plot=False):
         plt.show()
     return weights
 
+def colorfulness(R,G,B):
+    rg = R - G
+    yb = 0.5 * (R + G) - B
+    std_rg = np.std(rg)
+    std_yb = np.std(yb)
+    mean_rg = np.mean(rg)
+    mean_yb = np.mean(yb)
+    colorfulness = np.sqrt(std_rg**2 + std_yb**2) + 0.3 * np.sqrt(mean_rg**2 + mean_yb**2)
+    return round(colorfulness, 3)
+
+
+def color_complexity(masked_img, n_bins=32):
+    ''' 
+    Calculates color complexity (Liu et al., 2025) as the Shannon entropy of the color distribution within given FOV mask.
+    '''
+    # Quantize each channel into n_bins levels
+    pixels = masked_img.astype(np.float64) 
+    bin_edges = np.linspace(0, 256, n_bins + 1)
+    quantized = np.digitize(pixels, bin_edges[1:-1], right=False)  # shape (N, 3), values in [0, n_bins-1]
+
+    # Map each quantized (R, G, B) triplet to a single integer "color index"
+    color_indices = quantized[:, 0] * n_bins**2 + quantized[:, 1] * n_bins + quantized[:, 2]
+
+    # Count occurrences of each distinct color (this gives M and the p(k) distribution)
+    _, counts = np.unique(color_indices, return_counts=True)
+    p_k = counts / counts.sum()
+
+    # Shannon entropy: CC_image = - sum_k p(k) * log(p(k))
+    cc_image = -np.sum(p_k * np.log(p_k))
+
+    return cc_image
+
 def compute_visual_statistics(img, fov_mask, gaze_fixation, weighted_average=False):
 
     visual_stats = {}
@@ -49,24 +81,31 @@ def compute_visual_statistics(img, fov_mask, gaze_fixation, weighted_average=Fal
     visual_stats['fov_saturation'] = round(np.mean(img_hsv[fov_mask, 1]), 3)
     visual_stats['fov_value'] = round(np.mean(img_hsv[fov_mask, 2]), 3)
 
-    # Colorfulness
+    # RGB channels
     R = img[fov_mask, 0].astype(np.float64)
     G = img[fov_mask, 1].astype(np.float64)
     B = img[fov_mask, 2].astype(np.float64)
-    rg = R - G
-    yb = 0.5 * (R + G) - B
-    std_rg = np.std(rg)
-    std_yb = np.std(yb)
-    mean_rg = np.mean(rg)
-    mean_yb = np.mean(yb)
-    colorfulness = np.sqrt(std_rg**2 + std_yb**2) + 0.3 * np.sqrt(mean_rg**2 + mean_yb**2)
-    visual_stats['fov_colorfulness'] = round(colorfulness, 3)
+    visual_stats['fov_R_mean'] = round(np.mean(R), 3)
+    visual_stats['fov_G_mean'] = round(np.mean(G), 3)
+    visual_stats['fov_B_mean'] = round(np.mean(B), 3)
+
+    # Colorfulness (Hasler & Süsstrunk, 2003)
+    visual_stats['fov_colorfulness'] = colorfulness(R,G,B)
+
+    # Color complexity (Liu et al., 2025)
+    visual_stats['fov_color_complexity'] = color_complexity(img[fov_mask])
+
+    # Clarity / edge sharpness (Liu et al., 2025)
+    laplacian = cv2.Laplacian(img_gray, cv2.CV_64F)
+    visual_stats['fov_clarity'] = round(np.mean(np.abs(laplacian[fov_mask])), 3)
+
+
 
     return visual_stats
 
 # ---- Main function ---
 
-def main_function(sub, validation, fps, stimuli_dir, output_dir, verbose=False):
+def main_function(sub, validation, fps, stimuli_dir, output_dir, chunk_size=10, verbose=False):
     '''
     Loads precomputed FOV frustum and gaze fixation for each video frame, and calculates visual statistics. 
     Input: 
@@ -88,7 +127,7 @@ def main_function(sub, validation, fps, stimuli_dir, output_dir, verbose=False):
 
     # Directories
     sub_data_dir = os.path.join(output_dir, sub)
-    mask_path = os.path.join(sub_data_dir, f'{sub}_mask-history_{fps}-fps.npz')
+    mask_path = os.path.join(sub_data_dir, f'{sub}_mask-history_{fps}-fps.npz' if chunk_size is None else f'{sub}_mask-history_{fps}-fps_chunked')
     gaze_path = os.path.join(sub_data_dir, f'{sub}_gaze-history_{fps}-fps.npy')
     visual_stats_path = os.path.join(sub_data_dir, f'{sub}_visual-stats-history_{fps}-fps.csv')
     validation_str = 'validation_' if validation else ''
@@ -105,15 +144,23 @@ def main_function(sub, validation, fps, stimuli_dir, output_dir, verbose=False):
     # Load pre-computed frustum mask history, gaze history, and visual statistics history if applicable
     if verbose:
         print(f'Loading pre-computed frustum mask history and gaze history for subject {sub} {validation_str} stored at {mask_path} and {gaze_path}')
-    mask_history_loaded = np.load(mask_path, allow_pickle=True)
-    mask_history = {k: mask_history_loaded[k] for k in mask_history_loaded.files}
     gaze_history = np.load(gaze_path, allow_pickle=True)
+    if chunk_size is None:
+        mask_history_loaded = np.load(mask_path, allow_pickle=True)
+        mask_history = {k: mask_history_loaded[k] for k in mask_history_loaded.files}
+    else: 
+        chunk_files = sorted([f for f in os.listdir(mask_path) if f.startswith('chunk-') and f.endswith('.npz')])
 
     visual_stats_history = {}
-    for idx in tqdm.tqdm(range(len(mask_history)), desc=f'Calculating visual statistics for {sub} {validation_str}'):
-        curr_exp_time = round(idx / fps, 3)
-        fov_mask = mask_history.get(str(idx))
+    for idx in tqdm.tqdm(range(len(gaze_history)), desc=f'Calculating visual statistics for {sub} {validation_str}'):
+        print('idx', idx)
+       # curr_exp_time = round(idx / fps, 3)
         gaze_fixation = gaze_history[idx]
+        if chunk_size is None:
+            fov_mask = mask_history.get(str(idx))
+        else:
+            chunk_history = np.load(os.path.join(mask_path, f'chunk-{idx//chunk_size}.npz'), allow_pickle=True)
+            fov_mask = chunk_history.get(str(idx%chunk_size))
         img = np.array(Image.open(os.path.join(video_frames_dir, f'frame_{idx}.jpg')))
         visual_stats = compute_visual_statistics(img, fov_mask, gaze_fixation)
         visual_stats_history[idx] = visual_stats

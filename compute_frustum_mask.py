@@ -2,10 +2,13 @@ import argparse
 import os
 from pathlib import Path
 import tqdm
+import compute_visual_stats
 import numpy as np
 import pandas as pd
 from PIL import Image
 from scipy.ndimage import binary_dilation
+from compute_visual_stats import compute_visual_statistics
+import resource
 
 # ---- Utility functions ---
 
@@ -40,7 +43,7 @@ def rotate_around(vec, axis, angle_rad):
 
 # ---- Main functions ---
 
-def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, binary_dilation_iters=10):
+def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, binary_dilation_iters=2):
     """
     ***CREATED WITH THE HELP OF CLAUDE***
     Projects a rectilinear FOV frustum onto the equirectangular sphere and returns the UV pixel coordinates of the sampled grid.
@@ -144,7 +147,7 @@ def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, 
     return mask, gaze_vector
 
 
-def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, stimuli_dir=None, output_dir=None, verbose=True):
+def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, binary_dilation_iters=2, chunk_size=None, compute_visual_stats=False, stimuli_dir=None, output_dir=None, verbose=True):
     '''
     Loads preprocessed data for a given subject, computes the FOV frustum and gaze fixation for each video frame, and saves the results.
     Input: 
@@ -158,6 +161,12 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, stimuli_dir=
             Horizontal field of view in degrees.
         vfov: float
             Vertical field of view in degrees.
+        n_rays: int
+            Number of rays to sample for each frame.
+        chunk_size: int
+            Size of chunks for saving the mask history.
+        compute_visual_stats: bool
+            Whether to also compute visual statistics for each frame.
         stimuli_dir: str or Path
             Directory containing the video frames.
         output_dir: str or Path
@@ -172,6 +181,7 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, stimuli_dir=
     sub_data_dir = os.path.join(output_dir, sub)
     mask_path = os.path.join(sub_data_dir, f'{sub}_mask-history_{fps}-fps.npz')
     gaze_path = os.path.join(sub_data_dir, f'{sub}_gaze-history_{fps}-fps.npy')
+    visual_stats_path = os.path.join(sub_data_dir, f'{sub}_visual-stats-history_{fps}-fps.csv')
     validation_str = 'validation_' if validation else ''
     video_frames_dir = os.path.join(stimuli_dir, f'{validation_str}video_frames_{fps}FPS')
     validation_str = '(validation)' if validation else ''
@@ -196,18 +206,50 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, stimuli_dir=
     # Iterate over rows of data and compute FOV frustum and gaze fixation for each frame
     mask_history = {}
     gaze_history = {}
+    visual_stats_history = {} # In case we want to compute visual statistics at the same time
+    chunk_flush = chunk_size is not None
+    if chunk_flush:
+        mask_path = os.path.join(sub_data_dir, f'{sub}_mask-history_{fps}-fps_chunked')
+        os.makedirs(mask_path, exist_ok=True)
+        chunk_idx = 0     # If using chunked memory-mapping...
+        mask_chunk = {}
     for idx in tqdm.tqdm(range(n_frames), desc=f'Computing frustum masks for {sub} {validation_str} ({n_frames} frames)'):
         # Get matching row data + curr_exp_time + image based on index
         curr_row = sub_data_trimmed.iloc[idx]
-        curr_exp_time = round(curr_row['exp_time'], 3)
+      #  curr_exp_time = round(curr_row['exp_time'], 3)
         img = np.array(Image.open(os.path.join(video_frames_dir, f'frame_{idx}.jpg')))
         w, h = img.shape[1], img.shape[0]
-        fov_mask, gaze_fixation = compute_fov_frustum(curr_row, video_width=w, video_height=h, hfov=hfov, vfov=vfov, N_rays=750)
-        mask_history[idx] = fov_mask
+        fov_mask, gaze_fixation = compute_fov_frustum(curr_row, video_width=w, video_height=h, hfov=hfov, vfov=vfov, N_rays=n_rays, binary_dilation_iters=binary_dilation_iters)
+        if chunk_flush:
+            mask_chunk[str(idx)] = fov_mask
+            if len(mask_chunk) >= chunk_size:
+                np.savez(os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz'), **mask_chunk)
+                mask_chunk = {} 
+                chunk_idx += 1
+                print(f'Chunk {str(chunk_idx)} saved to {mask_path}')
+                peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+                print(f"[chunk {chunk_idx}] peak memory so far: {peak_mb:.1f} MB", flush=True)
+        else:
+            mask_history[idx] = fov_mask
         gaze_history[idx] = gaze_fixation
+
+        if compute_visual_stats:
+            visual_stats = compute_visual_statistics(img, fov_mask, gaze_fixation)
+            visual_stats_history[idx] = visual_stats
+
     # Save files
-    np.savez(mask_path, **{str(k): v for k, v in mask_history.items()})
+    if mask_chunk:
+        np.savez(os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz'), **mask_chunk)
+        print(f'Chunk {str(chunk_idx)} saved to {mask_path}')
+        final_peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        print(f"FINAL peak memory usage: {final_peak_mb:.1f} MB")
+    else:
+        np.savez(mask_path, **{str(k): v for k, v in mask_history.items()})
     np.save(gaze_path, np.array(list(gaze_history.values())))
+    if compute_visual_stats:
+        visual_stats_df = pd.DataFrame.from_dict(visual_stats_history, orient='index')
+        visual_stats_df.index.name = 'frame_idx'
+        visual_stats_df.to_csv(visual_stats_path)
 
     if verbose:
         print(f'Finished processing subject {sub} {validation_str}. Frustum mask history and gaze history saved to {sub_data_dir}')
@@ -219,6 +261,10 @@ if __name__ == "__main__":
     parser.add_argument('--fps', type=int, default=1, help='FPS at which data will be trimmed to match extracted video frames.')
     parser.add_argument('--hfov', type=float, default=100.0, help='Horizontal field of view in degrees')
     parser.add_argument('--vfov', type=float, default=100.0, help='Vertical field of view in degrees')
+    parser.add_argument('--n_rays', type=int, default=100, help='Number of rays to use for frustum computation.')
+    parser.add_argument('--binary_dilation_iters', type=int, default=2, help='Number of iterations for binary dilation.')
+    parser.add_argument('--chunk_size', type=int, default=None, help='Size of chunks for saving the mask history. If None, the entire mask history will be saved in a single file.')
+    parser.add_argument('--compute_visual_stats', action='store_true', default=False, help='Whether to compute visual statistics for each frame after computing the frustum mask and gaze fixation.')
     parser.add_argument('--stimuli_dir', type=str, default=Path('stimuli'), help='Directory containing the video frames.')
     parser.add_argument('--output_dir', type=str, default=Path('output'), help='Directory containing the output data for each subject.')
     parser.add_argument('--verbose', action='store_true', help='Whether to print verbose output')
@@ -237,4 +283,4 @@ if __name__ == "__main__":
     else:
         raise ValueError('For sub, please provide a string (e.g., sub-001) or None.')
     for curr_sub in subs:
-        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, hfov=args.hfov, vfov=args.vfov, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)
+        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, hfov=args.hfov, vfov=args.vfov, n_rays=args.n_rays, binary_dilation_iters=args.binary_dilation_iters, chunk_size=args.chunk_size, compute_visual_stats=args.compute_visual_stats, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)

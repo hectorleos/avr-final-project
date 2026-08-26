@@ -1,0 +1,36 @@
+Computing FOV frustum and gaze fixation for subject sub-002  using following parameters: fps=1, hfov=100.0, vfov=100.0
+Loading preprocessed data for subject sub-002  in directory /ptmp/hleosme/avr_output/sub-002
+Note: Data was trimmed to 1396 frames (1396.85 total seconds at 1 FPS)
+Chunk 1 saved to /ptmp/hleosme/avr_output/sub-002/sub-002_mask-history_1-fps_chunked
+[chunk 1] peak memory so far: 5712.9 MB
+Chunk 1 saved to /ptmp/hleosme/avr_output/sub-002/sub-002_mask-history_1-fps_chunked
+FINAL peak memory usage: 5712.9 MB
+Finished processing subject sub-002 . Frustum mask history and gaze history saved to /ptmp/hleosme/avr_output/sub-002
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: hleosme(50175)
+Job name:  avr_preprocess
+Node list: ravc4007
+Job start: Wed Aug 26 16:02:23 CEST 2026
+Job end:   Wed Aug 26 16:13:12 CEST 2026
+Work dir:  /u/hleosme/projects/avr-final-project/./
+Command:   /raven/u/hleosme/projects/avr-final-project/run_analysis.sh
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+29642846      avr_prepro      1             2                             00:10:49      0:0
+29642846.0        python      1      1      2     5730.02M     5730.02M   00:10:45      0:0
+  
+Maximum memory per node: 6.008357 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 86.3 %
+  

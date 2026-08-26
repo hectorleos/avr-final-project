@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../ptmp/hleosme/avr_output"
+		},
+		{
+			"path": "../../../../ptmp/hleosme/avr_stimuli"
+		}
+	],
+	"settings": {}
+}

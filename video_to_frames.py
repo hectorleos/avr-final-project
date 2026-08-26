@@ -106,7 +106,7 @@ if __name__ == "__main__":
     parser.add_argument('--validation', action='store_true', default=False, help='Whether to use video presented during validation (with fixation crosses).')
     parser.add_argument('--video_fps', type=int, default=30, help='Video FPS.')
     parser.add_argument('--desired_fps', type=int, default=1, help='FPS of extracted frames.')
-    parser.add_argument('--frame_quality', type=int, default=10, help='Image quality of each frame from 0 (worse) to 100 (best).')
+    parser.add_argument('--frame_quality', type=int, default=90, help='Image quality of each frame from 0 (worse) to 100 (best).')
     parser.add_argument('--crop_half', action='store_true', default=False, help='Whether to crop frame to keep only upper half.')
     parser.add_argument('--verbose', action='store_true', help='Whether to print verbose output')
 
