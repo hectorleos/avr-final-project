@@ -6,23 +6,37 @@ import compute_visual_stats
 import numpy as np
 import pandas as pd
 from PIL import Image
-from scipy.ndimage import binary_dilation
+#from scipy.ndimage import binary_dilation
 from compute_visual_stats import compute_visual_statistics
 import resource
+import cv2
 
 # ---- Utility functions ---
 
-def data_subset_fps(data, fps, total_video_length):
+def data_subset_fps(data, fps, total_video_length, video_frames_dir):
     ''' Gets a subset of the data at desired FPS by selecting the row closest to each second. '''
    # data = data.reset_index(drop=True)
+
+    # Get last extracted frame 
+    frame_names = os.listdir(video_frames_dir)
+    frame_names.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
+    last_frame_name = frame_names[-1]
+    last_frame_idx = int(last_frame_name.split('_')[-1].split('.')[0])
+
+    # Iterate over each second and find the closest row in the data
     second_indices = []
     step = 1 / fps
-    for sec in np.arange(0, int(total_video_length), step):
+    for sec_idx, sec in enumerate(np.arange(0, total_video_length, step)):
         diffs = data['exp_time'] - sec
         # Keep only positive values
         diffs = diffs.where(diffs >= 0)
         idx = diffs.idxmin()
         second_indices.append(int(idx))
+
+        # Make sure we don't go beyond the last extracted frame
+        if sec_idx >= last_frame_idx:
+            break
+
     subset_data = data.iloc[second_indices].reset_index(drop=True)
     return subset_data
 
@@ -40,10 +54,43 @@ def rotate_around(vec, axis, angle_rad):
     c, s = np.cos(angle_rad), np.sin(angle_rad)
     return vec * c + np.cross(axis, vec) * s + axis * np.dot(axis, vec) * (1 - c)
 
+def rasterize_fov_mask(u, vi, N_rays, video_width, video_height):
+    """
+    ***CREATED WITH THE HELP OF CLAUDE***
+    u: unwrapped horizontal pixel coordinate (i.e. BEFORE the `u % video_width` step)
+    vi: vertical pixel coordinate (already clipped to [0, video_height-1])
+    """
+    u_grid  = u.reshape(N_rays, N_rays)   # continuous/unwrapped — can be arbitrarily offset
+    vi_grid = vi.reshape(N_rays, N_rays)
+
+    top    = np.stack([u_grid[0, :],      vi_grid[0, :]],      axis=1)
+    right  = np.stack([u_grid[:, -1],     vi_grid[:, -1]],     axis=1)
+    bottom = np.stack([u_grid[-1, ::-1],  vi_grid[-1, ::-1]],  axis=1)
+    left   = np.stack([u_grid[::-1, 0],   vi_grid[::-1, 0]],   axis=1)
+    boundary = np.vstack([top, right, bottom, left])
+
+    u_coords = boundary[:, 0]
+    v_coords = boundary[:, 1]
+
+    # Re-center the polygon to the canonical [0, video_width) neighborhood first,
+    # since np.unwrap has no fixed reference and can leave the whole shape
+    # offset by an arbitrary multiple of video_width.
+    center_shift = np.round(np.mean(u_coords) / video_width) * video_width
+    u_coords = u_coords - center_shift
+
+    mask = np.zeros((video_height, video_width), dtype=np.uint8)
+
+    # Always draw all three neighboring copies — no heuristic needed.
+    # Whichever ones actually fall inside the canvas contribute; the rest are harmless no-ops.
+    for shift in (-video_width, 0, video_width):
+        pts = np.stack([(u_coords + shift).astype(np.int32), v_coords.astype(np.int32)], axis=1)
+        cv2.fillPoly(mask, [pts], 1)
+
+    return mask.astype(bool)
 
 # ---- Main functions ---
 
-def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, binary_dilation_iters=2):
+def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64):
     """
     ***CREATED WITH THE HELP OF CLAUDE***
     Projects a rectilinear FOV frustum onto the equirectangular sphere and returns the UV pixel coordinates of the sampled grid.
@@ -57,8 +104,6 @@ def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, 
             Horizontal and vertical field of view in degrees.
         N_rays: int
             Resolution of the grid (N_rays × N_rays rays sampled inside the FOV).
-        binary_dilation_iters: int
-            Number of iterations for binary dilation to fill in gaps between sampled rays.
     Output:
         mask: numpy array of shape (video_height, video_width)
             Boolean mask indicating which pixels are inside the FOV frustum.
@@ -111,20 +156,29 @@ def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, 
     lon = np.arctan2(ry, rx)                    # [-π, π]
     lat = np.arcsin(np.clip(rz, -1.0, 1.0))     # [-π/2, π/2]
 
+    # --- For rasterize_fov_mask approach ---- 
+    # Reshape to grid and unwrap longitude so adjacent rays don't show a fake 360° jump
+    lon_grid = lon.reshape(N_rays, N_rays)
+    lon_grid = np.unwrap(lon_grid, axis=1)   # continuity along each row (horizontal sweep)
+    lon_grid = np.unwrap(lon_grid, axis=0)   # continuity down each column too
+    lon = lon_grid.ravel()
+    # -----------------------------------------
+
     # Scale to pixel coordinates in equirectangular frame
     u = ((np.degrees(lon) + 180) / 360) * video_width
     v = ((90 - np.degrees(lat)) / 180) * video_height
 
     # Wrap u horizontally (handles antimeridian crossing cleanly)
-    u = u % video_width
+ #   wrapped_u = u % video_width
 
     # --- 4. Obtain a boolean mask of the FOV region in pixel space ---
     mask = np.zeros((video_height, video_width), dtype=bool)
-    ui = np.clip(np.round(u).astype(int), 0, video_width  - 1)
+  #  ui = np.clip(np.round(wrapped_u).astype(int), 0, video_width  - 1)
     vi = np.clip(np.round(v).astype(int), 0, video_height - 1)
-    mask[vi, ui] = True
+    # mask[vi, ui] = True
     # Dilate the mask to fill in gaps between sampled rays (since N_rays is discrete)
-    mask = binary_dilation(mask, iterations=binary_dilation_iters)  
+    # mask = binary_dilation(mask, iterations=binary_dilation_iters)  
+    mask = rasterize_fov_mask(u, vi, N_rays, video_width, video_height)
 
     # --- Repeat same process for gaze vector to get its pixel coordinates --- #
     
@@ -147,7 +201,7 @@ def compute_fov_frustum(data, video_width, video_height, hfov, vfov, N_rays=64, 
     return mask, gaze_vector
 
 
-def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, binary_dilation_iters=2, chunk_size=None, compute_visual_stats=False, stimuli_dir=None, output_dir=None, verbose=True):
+def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, chunk_size=None, compute_visual_stats=False, stimuli_dir=None, output_dir=None, verbose=True):
     '''
     Loads preprocessed data for a given subject, computes the FOV frustum and gaze fixation for each video frame, and saves the results.
     Input: 
@@ -198,7 +252,7 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, 
     with open(os.path.join(sub_data_dir, f'{sub}_preprocessed_data.csv'), 'r') as f:
         sub_data  = pd.read_csv(f)
     total_video_length = round(float(sub_data['exp_time'].iloc[-1]), 2)
-    sub_data_trimmed = data_subset_fps(sub_data, fps, total_video_length)
+    sub_data_trimmed = data_subset_fps(sub_data, fps, total_video_length, video_frames_dir)
     n_frames = sub_data_trimmed.shape[0]
     if verbose:
         print(f'Note: Data was trimmed to {n_frames} frames ({total_video_length} total seconds at {fps} FPS)')
@@ -212,6 +266,7 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, 
         mask_path = os.path.join(sub_data_dir, f'{sub}_mask-history_{fps}-fps_chunked')
         os.makedirs(mask_path, exist_ok=True)
         chunk_idx = 0     # If using chunked memory-mapping...
+        chunk_path = os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz')
         mask_chunk = {}
     for idx in tqdm.tqdm(range(n_frames), desc=f'Computing frustum masks for {sub} {validation_str} ({n_frames} frames)'):
         # Get matching row data + curr_exp_time + image based on index
@@ -219,14 +274,15 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, 
       #  curr_exp_time = round(curr_row['exp_time'], 3)
         img = np.array(Image.open(os.path.join(video_frames_dir, f'frame_{idx}.jpg')))
         w, h = img.shape[1], img.shape[0]
-        fov_mask, gaze_fixation = compute_fov_frustum(curr_row, video_width=w, video_height=h, hfov=hfov, vfov=vfov, N_rays=n_rays, binary_dilation_iters=binary_dilation_iters)
+        fov_mask, gaze_fixation = compute_fov_frustum(curr_row, video_width=w, video_height=h, hfov=hfov, vfov=vfov, N_rays=n_rays)
         if chunk_flush:
             mask_chunk[str(idx)] = fov_mask
             if len(mask_chunk) >= chunk_size:
-                np.savez(os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz'), **mask_chunk)
+                np.savez(chunk_path, **mask_chunk)
+                print(f'Chunk {str(chunk_idx)} saved to {mask_path}')
                 mask_chunk = {} 
                 chunk_idx += 1
-                print(f'Chunk {str(chunk_idx)} saved to {mask_path}')
+                chunk_path = os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz')
                 peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
                 print(f"[chunk {chunk_idx}] peak memory so far: {peak_mb:.1f} MB", flush=True)
         else:
@@ -238,8 +294,8 @@ def main_function(sub, validation=False, fps=2, hfov=100, vfov=100, n_rays=100, 
             visual_stats_history[idx] = visual_stats
 
     # Save files
-    if mask_chunk:
-        np.savez(os.path.join(mask_path, f'chunk-{str(chunk_idx)}.npz'), **mask_chunk)
+    if chunk_flush:
+        np.savez(chunk_path, **mask_chunk)
         print(f'Chunk {str(chunk_idx)} saved to {mask_path}')
         final_peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
         print(f"FINAL peak memory usage: {final_peak_mb:.1f} MB")
@@ -262,7 +318,6 @@ if __name__ == "__main__":
     parser.add_argument('--hfov', type=float, default=100.0, help='Horizontal field of view in degrees')
     parser.add_argument('--vfov', type=float, default=100.0, help='Vertical field of view in degrees')
     parser.add_argument('--n_rays', type=int, default=100, help='Number of rays to use for frustum computation.')
-    parser.add_argument('--binary_dilation_iters', type=int, default=2, help='Number of iterations for binary dilation.')
     parser.add_argument('--chunk_size', type=int, default=None, help='Size of chunks for saving the mask history. If None, the entire mask history will be saved in a single file.')
     parser.add_argument('--compute_visual_stats', action='store_true', default=False, help='Whether to compute visual statistics for each frame after computing the frustum mask and gaze fixation.')
     parser.add_argument('--stimuli_dir', type=str, default=Path('stimuli'), help='Directory containing the video frames.')
@@ -283,4 +338,4 @@ if __name__ == "__main__":
     else:
         raise ValueError('For sub, please provide a string (e.g., sub-001) or None.')
     for curr_sub in subs:
-        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, hfov=args.hfov, vfov=args.vfov, n_rays=args.n_rays, binary_dilation_iters=args.binary_dilation_iters, chunk_size=args.chunk_size, compute_visual_stats=args.compute_visual_stats, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)
+        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, hfov=args.hfov, vfov=args.vfov, n_rays=args.n_rays, chunk_size=args.chunk_size, compute_visual_stats=args.compute_visual_stats, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)

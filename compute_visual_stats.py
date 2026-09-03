@@ -50,17 +50,28 @@ def color_complexity(masked_img, n_bins=32):
     color_indices = quantized[:, 0] * n_bins**2 + quantized[:, 1] * n_bins + quantized[:, 2]
 
     # Count occurrences of each distinct color (this gives M and the p(k) distribution)
-    _, counts = np.unique(color_indices, return_counts=True)
+    counts = np.bincount(color_indices, minlength=n_bins**3)
+    counts = counts[counts > 0]   # drop empty bins before taking log
     p_k = counts / counts.sum()
 
-    # Shannon entropy: CC_image = - sum_k p(k) * log(p(k))
     cc_image = -np.sum(p_k * np.log(p_k))
-
     return cc_image
 
 def compute_visual_statistics(img, fov_mask, gaze_fixation, weighted_average=False):
 
     visual_stats = {}
+
+    # Crop to mask bounding box to save computation time
+    rows = np.any(fov_mask, axis=1)
+    cols = np.any(fov_mask, axis=0)
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    pad = 2  # small margin so Laplacian isn't starved of neighbors at the crop edge
+    rmin, rmax = max(0, rmin - pad), min(img.shape[0], rmax + pad + 1)
+    cmin, cmax = max(0, cmin - pad), min(img.shape[1], cmax + pad + 1)
+    img = img[rmin:rmax, cmin:cmax]
+    fov_mask = fov_mask[rmin:rmax, cmin:cmax]
+
     # Build Gaussian filter to build weighted averages
     if weighted_average:   
       weights =  gaussian_weight_map(fov_mask, gaze_fixation)
@@ -99,13 +110,11 @@ def compute_visual_statistics(img, fov_mask, gaze_fixation, weighted_average=Fal
     laplacian = cv2.Laplacian(img_gray, cv2.CV_64F)
     visual_stats['fov_clarity'] = round(np.mean(np.abs(laplacian[fov_mask])), 3)
 
-
-
     return visual_stats
 
 # ---- Main function ---
 
-def main_function(sub, validation, fps, stimuli_dir, output_dir, chunk_size=10, verbose=False):
+def main_function(sub, validation, fps, chunk_size, stimuli_dir, output_dir, verbose=False):
     '''
     Loads precomputed FOV frustum and gaze fixation for each video frame, and calculates visual statistics. 
     Input: 
@@ -115,6 +124,8 @@ def main_function(sub, validation, fps, stimuli_dir, output_dir, chunk_size=10, 
             Whether to run in validation mode, using validation video frames instead of the main experimental stimuli. 
         fps: int
             FPS at which data will be trimmed to match extracted video frames.
+        chunk_size: int or None
+            Size of chunks of mask history. If None, the entire mask history will be loaded from a single file.
         stimuli_dir: str or Path
             Directory containing the video frames.
         output_dir: str or Path
@@ -134,6 +145,7 @@ def main_function(sub, validation, fps, stimuli_dir, output_dir, chunk_size=10, 
     video_frames_dir = os.path.join(stimuli_dir, f'{validation_str}video_frames_{fps}FPS')
     print(f'Computing visual statistics for subject {sub} {validation_str} using following parameters: fps={fps}')
     validation_str = '(validation)' if validation else ''
+    chunk_flush = chunk_size is not None
 
     # Check if the required files exist
     if not os.path.exists(mask_path) or not os.path.exists(gaze_path):
@@ -145,22 +157,25 @@ def main_function(sub, validation, fps, stimuli_dir, output_dir, chunk_size=10, 
     if verbose:
         print(f'Loading pre-computed frustum mask history and gaze history for subject {sub} {validation_str} stored at {mask_path} and {gaze_path}')
     gaze_history = np.load(gaze_path, allow_pickle=True)
-    if chunk_size is None:
+    if chunk_flush:
+        prev_chunk_idx = 0
+        chunk_history = np.load(os.path.join(mask_path, f'chunk-{prev_chunk_idx}.npz'), allow_pickle=True)
+    else:
         mask_history_loaded = np.load(mask_path, allow_pickle=True)
         mask_history = {k: mask_history_loaded[k] for k in mask_history_loaded.files}
-    else: 
-        chunk_files = sorted([f for f in os.listdir(mask_path) if f.startswith('chunk-') and f.endswith('.npz')])
-
     visual_stats_history = {}
     for idx in tqdm.tqdm(range(len(gaze_history)), desc=f'Calculating visual statistics for {sub} {validation_str}'):
-        print('idx', idx)
        # curr_exp_time = round(idx / fps, 3)
         gaze_fixation = gaze_history[idx]
-        if chunk_size is None:
-            fov_mask = mask_history.get(str(idx))
+        if chunk_flush:
+            chunk_idx = idx // chunk_size 
+            if prev_chunk_idx < chunk_idx:
+                prev_chunk_idx = chunk_idx
+                chunk_history = np.load(os.path.join(mask_path, f'chunk-{prev_chunk_idx}.npz'), allow_pickle=True)
+            fov_mask = chunk_history.get(str(idx))
         else:
-            chunk_history = np.load(os.path.join(mask_path, f'chunk-{idx//chunk_size}.npz'), allow_pickle=True)
-            fov_mask = chunk_history.get(str(idx%chunk_size))
+            fov_mask = mask_history.get(str(idx))
+
         img = np.array(Image.open(os.path.join(video_frames_dir, f'frame_{idx}.jpg')))
         visual_stats = compute_visual_statistics(img, fov_mask, gaze_fixation)
         visual_stats_history[idx] = visual_stats
@@ -177,6 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--sub', type=str, default=None, help='Subject ID (e.g., sub-001). If None, it will iterate through all subject directories in data_dir.')
     parser.add_argument('--validation', action='store_true', default=False, help='Whether to run in validation mode (uses validation video frames).')
     parser.add_argument('--fps', type=int, default=1, help='FPS at which data will be trimmed to match extracted video frames.')
+    parser.add_argument('--chunk_size', type=int, default=None, help='Size of chunks for saving the mask history. If None, the entire mask history will be saved in a single file.')
     parser.add_argument('--stimuli_dir', type=str, default=Path('stimuli'), help='Directory containing the video frames.')
     parser.add_argument('--output_dir', type=str, default=Path('output'), help='Directory containing the output data for each subject.')
     parser.add_argument('--verbose', action='store_true', help='Whether to print verbose output')
@@ -195,4 +211,4 @@ if __name__ == "__main__":
     else:
         raise ValueError('For sub, please provide a string (e.g., sub-001) or None.')
     for curr_sub in subs:
-        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)
+        main_function(sub=curr_sub, validation=args.validation, fps=args.fps, chunk_size=args.chunk_size, stimuli_dir=args.stimuli_dir, output_dir=args.output_dir, verbose=True) #args.verbose)

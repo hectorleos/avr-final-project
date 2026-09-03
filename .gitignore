@@ -7,4 +7,11 @@ output/
 stimuli/
 data/
 /logs/
+/logs_to_keep/
 
+# Or other temporary files
+playground.ipynb
+avr-final-project.code-workspace
+compute_frustum_mask_copy.py
+run_analysis.sh
+run_analysis0.sh

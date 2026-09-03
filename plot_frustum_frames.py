@@ -107,15 +107,27 @@ def main_function(sub, validation, fps, darkening_factor, dpi, chunk_size, plot_
     if plot_visual_stats:
         visual_stats_history = pd.read_csv(visual_stats_path, index_col=0).to_dict(orient='index')
 
+    current_chunk_idx = None
+    chunk_history = None
     for idx in tqdm.tqdm(range(len(gaze_history)), desc=f'Plotting frames with frustum for {sub} {validation_str}'):
         curr_exp_time = round(idx / fps, 3)
         gaze_fixation = gaze_history[idx]
         if chunk_size is None:
             fov_mask = mask_history.get(str(idx))
         else:
-            chunk_history = np.load(os.path.join(mask_path, f'chunk-{idx//chunk_size}.npz'), allow_pickle=True)
-            fov_mask = chunk_history.get(str(idx%chunk_size))
+            needed_chunk_idx = idx // chunk_size
+            if needed_chunk_idx != current_chunk_idx:
+                chunk_history = np.load(os.path.join(mask_path, f'chunk-{needed_chunk_idx}.npz'), allow_pickle=True)
+                current_chunk_idx = needed_chunk_idx
+            key = str(idx)
+            fov_mask = chunk_history[key] if key in chunk_history.files else None
+
+       
+           # chunk_history = np.load(os.path.join(mask_path, f'chunk-{idx//chunk_size}.npz'), allow_pickle=True)
+           # fov_mask = chunk_history.get(str(idx%chunk_size))
             print(f"For chunk '{idx//chunk_size}': getting mask at index {idx%chunk_size}")
+            if fov_mask is None:
+                print('------------------ NONE FOV_MASK!!!!!!')
         visual_stats = visual_stats_history[idx] if plot_visual_stats else None
         img = np.array(Image.open(os.path.join(video_frames_dir, f'frame_{idx}.jpg')))
         plot_imgNfrustum(sub, img, fov_mask, gaze_fixation, visual_stats, curr_exp_time, output_dir=img_output_dir, darkening_factor=darkening_factor, dpi=dpi)

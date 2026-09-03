@@ -68,7 +68,6 @@ python compute_frustum_mask.py --fps 1 --hfov 100 --vfov 100 --n_rays 100 --stim
 | `--hfov` | `100` | Horizontal field of view in degrees of VR set |
 | `--vfov` | `100` | Vertical field of view in degrees of VR set |
 | `--n_rays` | `100` | Number of rays to use for frustum computation |
-| `--binary_dilation_iters` | `2` | Number of iterations for binary dilation |
 | `--chunk_size` | None | (int) Size of chunks for saving the mask history. If None, will save all data in a single file |
 | `--compute_visual_stats` | `False` |  Whether to also compute visual statistics for each frame |
 | `--stimuli_dir` | 'stimuli' | Path to directory containing raw and processed stimuli |

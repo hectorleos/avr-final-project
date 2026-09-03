@@ -4,10 +4,13 @@
 			"path": "."
 		},
 		{
-			"path": "../../../../ptmp/hleosme/avr_output"
+			"path": "../../../../ptmp/hleosme/avr_stimuli"
 		},
 		{
-			"path": "../../../../ptmp/hleosme/avr_stimuli"
+			"path": "../../../../ptmp/hleosme/avr_data/rawdata"
+		},
+		{
+			"path": "../../../../ptmp/hleosme/avr_output"
 		}
 	],
 	"settings": {}
